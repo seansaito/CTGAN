@@ -1,5 +1,5 @@
 import torch
-from torch.nn import BatchNorm1d, Dropout, LeakyReLU, Linear, Module, ReLU, Sequential
+from torch.nn import BatchNorm1d, Dropout, LeakyReLU, Linear, Module, ReLU, Sequential, Tanh
 
 
 class Discriminator(Module):
@@ -33,7 +33,8 @@ class Discriminator(Module):
         self.packdim = dim
         seq = []
         for item in list(dis_dims):
-            seq += [Linear(dim, item), LeakyReLU(0.2), Dropout(0.5)]
+            seq += [Linear(dim, item), BatchNorm1d(item), LeakyReLU(0.2), Dropout(0.5)]
+            # seq += [Linear(dim, item), Tanh()]
             dim = item
 
         seq += [Linear(dim, 1)]
@@ -49,7 +50,7 @@ class Residual(Module):
         super(Residual, self).__init__()
         self.fc = Linear(i, o)
         self.bn = BatchNorm1d(o)
-        self.relu = ReLU()
+        self.relu = LeakyReLU(0.2)
 
     def forward(self, input):
         out = self.fc(input)
