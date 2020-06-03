@@ -8,6 +8,12 @@ from ctgan.models import Discriminator, Generator
 from ctgan.sampler import Sampler
 from ctgan.transformer import DataTransformer
 
+def nanmean(v, *args, inplace=False, **kwargs):
+    if not inplace:
+        v = v.clone()
+    is_nan = torch.isnan(v)
+    v[is_nan] = 0
+    return v.sum(*args, **kwargs) / (~is_nan).float().sum(*args, **kwargs)
 
 class CTGANSynthesizer(object):
     """Conditional Table GAN Synthesizer.
@@ -34,7 +40,7 @@ class CTGANSynthesizer(object):
     """
 
     def __init__(self, embedding_dim=128, gen_dim=(256, 256), dis_dim=(256, 256),
-                 l2scale=1e-6, batch_size=500):
+                 l2scale=1e-6, batch_size=500, gen_lr=2e-4, dis_lr=2e-4):
 
         self.embedding_dim = embedding_dim
         self.gen_dim = gen_dim
@@ -42,6 +48,8 @@ class CTGANSynthesizer(object):
 
         self.l2scale = l2scale
         self.batch_size = batch_size
+        self.gen_lr = gen_lr
+        self.dis_lr = dis_lr
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     def _apply_activate(self, data):
@@ -54,7 +62,10 @@ class CTGANSynthesizer(object):
                 st = ed
             elif item[1] == 'softmax':
                 ed = st + item[0]
-                data_t.append(functional.gumbel_softmax(data[:, st:ed], tau=0.2))
+                weights = functional.gumbel_softmax(data[:, st:ed], tau=0.2)
+                while np.isnan(torch.sum(weights).cpu().detach().numpy()):
+                    weights = functional.gumbel_softmax(data[:, st:ed], tau=0.2)
+                data_t.append(weights)
                 st = ed
             else:
                 assert 0
@@ -139,10 +150,11 @@ class CTGANSynthesizer(object):
         ).to(self.device)
 
         optimizerG = optim.Adam(
-            self.generator.parameters(), lr=2e-4, betas=(0.5, 0.9),
-            weight_decay=self.l2scale
+            self.generator.parameters(), lr=self.gen_lr
         )
-        optimizerD = optim.Adam(discriminator.parameters(), lr=2e-4, betas=(0.5, 0.9))
+        optimizerD = optim.Adam(
+            discriminator.parameters(), lr=self.dis_lr,
+        )
 
         assert self.batch_size % 2 == 0
         mean = torch.zeros(self.batch_size, self.embedding_dim, device=self.device)
@@ -184,7 +196,7 @@ class CTGANSynthesizer(object):
                 y_real = discriminator(real_cat)
 
                 pen = discriminator.calc_gradient_penalty(real_cat, fake_cat, self.device)
-                loss_d = -(torch.mean(y_real) - torch.mean(y_fake))
+                loss_d = -(nanmean(y_real) - nanmean(y_fake))
 
                 optimizerD.zero_grad()
                 pen.backward(retain_graph=True)
@@ -207,6 +219,7 @@ class CTGANSynthesizer(object):
 
                 if c1 is not None:
                     y_fake = discriminator(torch.cat([fakeact, c1], dim=1))
+
                 else:
                     y_fake = discriminator(fakeact)
 
@@ -215,12 +228,18 @@ class CTGANSynthesizer(object):
                 else:
                     cross_entropy = self._cond_loss(fake, c1, m1)
 
-                loss_g = -torch.mean(y_fake) + cross_entropy
+                loss_g = -nanmean(y_fake) + cross_entropy
+
 
                 optimizerG.zero_grad()
                 loss_g.backward()
                 optimizerG.step()
 
+
+            d_params = list(discriminator.parameters())
+            g_params = list(self.generator.parameters())
+            # print('Discriminator', [p.grad.cpu().numpy().max() for p in d_params])
+            # print('Generator', [p.grad.cpu().numpy().max() for p in g_params])
             print("Epoch %d, Loss G: %.4f, Loss D: %.4f" %
                   (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
                   flush=True)
