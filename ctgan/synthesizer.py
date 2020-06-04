@@ -8,6 +8,8 @@ from ctgan.models import Discriminator, Generator
 from ctgan.sampler import Sampler
 from ctgan.transformer import DataTransformer
 
+from tqdm import tqdm
+
 def nanmean(v, *args, inplace=False, **kwargs):
     if not inplace:
         v = v.clone()
@@ -161,7 +163,7 @@ class CTGANSynthesizer(object):
         std = mean + 1
 
         steps_per_epoch = max(len(train_data) // self.batch_size, 1)
-        for i in range(epochs):
+        for i in tqdm(range(epochs)):
             for id_ in range(steps_per_epoch):
                 fakez = torch.normal(mean=mean, std=std)
 
@@ -236,13 +238,9 @@ class CTGANSynthesizer(object):
                 optimizerG.step()
 
 
-            d_params = list(discriminator.parameters())
-            g_params = list(self.generator.parameters())
-            # print('Discriminator', [p.grad.cpu().numpy().max() for p in d_params])
-            # print('Generator', [p.grad.cpu().numpy().max() for p in g_params])
-            print("Epoch %d, Loss G: %.4f, Loss D: %.4f" %
-                  (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
-                  flush=True)
+            # print("Epoch %d, Loss G: %.4f, Loss D: %.4f" %
+            #       (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
+            #       flush=True)
 
     def sample(self, n):
         """Sample data similar to the training data.
