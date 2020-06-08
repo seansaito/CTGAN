@@ -243,6 +243,8 @@ class CTGANSynthesizer(object):
                   (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
                   flush=True)
 
+        self.discriminator = discriminator
+
     def sample(self, n):
         """Sample data similar to the training data.
 
