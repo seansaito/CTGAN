@@ -42,7 +42,7 @@ class CTGANSynthesizer(object):
     """
 
     def __init__(self, embedding_dim=128, gen_dim=(256, 256), dis_dim=(256, 256),
-                 l2scale=1e-6, batch_size=500, gen_lr=2e-4, dis_lr=2e-4):
+                 l2scale=1e-6, batch_size=500, gen_lr=2e-4, dis_lr=2e-4, verbose=False):
 
         self.embedding_dim = embedding_dim
         self.gen_dim = gen_dim
@@ -53,6 +53,7 @@ class CTGANSynthesizer(object):
         self.gen_lr = gen_lr
         self.dis_lr = dis_lr
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.verbose = verbose
 
     def _apply_activate(self, data):
         data_t = []
@@ -237,10 +238,10 @@ class CTGANSynthesizer(object):
                 loss_g.backward()
                 optimizerG.step()
 
-
-            # print("Epoch %d, Loss G: %.4f, Loss D: %.4f" %
-            #       (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
-            #       flush=True)
+            if self.verbose:
+                print("Epoch %d, Loss G: %.4f, Loss D: %.4f" %
+                      (i + 1, loss_g.detach().cpu(), loss_d.detach().cpu()),
+                      flush=True)
 
     def sample(self, n):
         """Sample data similar to the training data.
