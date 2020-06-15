@@ -7,8 +7,12 @@ from ctgan.conditional import ConditionalGenerator
 from ctgan.models import Discriminator, Generator
 from ctgan.sampler import Sampler
 from ctgan.transformer import DataTransformer
+import pandas as pd
+
+from sklearn.preprocessing import OneHotEncoder
 
 from tqdm import tqdm
+
 
 def nanmean(v, *args, inplace=False, **kwargs):
     if not inplace:
@@ -16,6 +20,7 @@ def nanmean(v, *args, inplace=False, **kwargs):
     is_nan = torch.isnan(v)
     v[is_nan] = 0
     return v.sum(*args, **kwargs) / (~is_nan).float().sum(*args, **kwargs)
+
 
 class CTGANSynthesizer(object):
     """Conditional Table GAN Synthesizer.
@@ -127,6 +132,16 @@ class CTGANSynthesizer(object):
                 Whether to use log frequency of categorical levels in conditional
                 sampling. Defaults to ``True``.
         """
+        self.discrete_columns = discrete_columns
+        # Fit OH encoder
+        self.oe = OneHotEncoder(sparse=False)
+        if type(train_data) is np.ndarray:
+            self.oe.fit(train_data[:, discrete_columns])
+            self.cat_column_idxes = discrete_columns
+        else:
+            self.oe.fit(train_data[discrete_columns])
+            features = train_data.columns
+            self.cat_column_idxes = [features.index(c) for c in discrete_columns]
 
         self.transformer = DataTransformer()
         self.transformer.fit(train_data, discrete_columns)
@@ -233,7 +248,6 @@ class CTGANSynthesizer(object):
 
                 loss_g = -nanmean(y_fake) + cross_entropy
 
-
                 optimizerG.zero_grad()
                 loss_g.backward()
                 optimizerG.step()
@@ -245,12 +259,14 @@ class CTGANSynthesizer(object):
 
         self.discriminator = discriminator
 
-    def sample(self, n):
+    def sample(self, n, test_instance=None):
         """Sample data similar to the training data.
 
         Args:
             n (int):
                 Number of rows to sample.
+            test_instance (Optional[np.ndarray]):
+                Test sample to condition sampler with
 
         Returns:
             numpy.ndarray or pandas.DataFrame
@@ -263,13 +279,24 @@ class CTGANSynthesizer(object):
             std = mean + 1
             fakez = torch.normal(mean=mean, std=std).to(self.device)
 
-            condvec = self.cond_generator.sample_zero(self.batch_size)
-            if condvec is None:
-                pass
+            if test_instance:
+                if type(test_instance) is pd.DataFrame:
+                    test_instance = test_instance.values
+                test_cat_onehot = self.oe.transform(test_instance[:, self.cat_column_idxes]).ravel()
+                nonzeroes = np.nonzero(test_cat_onehot)[0]
+                samples = np.random.choice(nonzeroes,
+                                           size=self.batch_size).astype(np.int8)
+                condvec = np.zeros((self.batch_size, self.cond_generator.n_opt))
+                condvec[list(range(self.batch_size)), samples] = 1
             else:
-                c1 = condvec
-                c1 = torch.from_numpy(c1).to(self.device)
-                fakez = torch.cat([fakez, c1], dim=1)
+
+                condvec = self.cond_generator.sample_zero(self.batch_size)
+                if condvec is None:
+                    pass
+                else:
+                    c1 = condvec
+                    c1 = torch.from_numpy(c1).to(self.device)
+                    fakez = torch.cat([fakez, c1], dim=1)
 
             fake = self.generator(fakez)
             fakeact = self._apply_activate(fake)
