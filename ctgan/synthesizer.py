@@ -282,7 +282,7 @@ class CTGANSynthesizer(object):
             std = mean + 1
             fakez = torch.normal(mean=mean, std=std).to(self.device)
 
-            if test_instance and self.cat_column_idxes:
+            if test_instance is not None and len(self.cat_column_idxes) > 0:
                 if type(test_instance) is pd.DataFrame:
                     test_instance = test_instance.values
                 test_cat_onehot = self.oe.transform(test_instance[:, self.cat_column_idxes]).ravel()
