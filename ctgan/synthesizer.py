@@ -292,14 +292,14 @@ class CTGANSynthesizer(object):
                 condvec = np.zeros((self.batch_size, self.cond_generator.n_opt))
                 condvec[list(range(self.batch_size)), samples] = 1
             else:
-
                 condvec = self.cond_generator.sample_zero(self.batch_size)
-                if condvec is None:
-                    pass
-                else:
-                    c1 = condvec
-                    c1 = torch.from_numpy(c1).to(self.device)
-                    fakez = torch.cat([fakez, c1], dim=1)
+
+            if condvec is None:
+                pass
+            else:
+                c1 = condvec
+                c1 = torch.from_numpy(c1).type(torch.FloatTensor).to(self.device)
+                fakez = torch.cat([fakez, c1], dim=1)
 
             fake = self.generator(fakez)
             fakeact = self._apply_activate(fake)
