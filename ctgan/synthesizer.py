@@ -135,13 +135,16 @@ class CTGANSynthesizer(object):
         self.discrete_columns = discrete_columns
         # Fit OH encoder
         self.oe = OneHotEncoder(sparse=False)
-        if type(train_data) is np.ndarray:
-            self.oe.fit(train_data[:, discrete_columns])
-            self.cat_column_idxes = discrete_columns
+        if discrete_columns:
+            if type(train_data) is np.ndarray:
+                self.oe.fit(train_data[:, discrete_columns])
+                self.cat_column_idxes = discrete_columns
+            else:
+                self.oe.fit(train_data[discrete_columns])
+                features = train_data.columns
+                self.cat_column_idxes = [features.index(c) for c in discrete_columns]
         else:
-            self.oe.fit(train_data[discrete_columns])
-            features = train_data.columns
-            self.cat_column_idxes = [features.index(c) for c in discrete_columns]
+            self.cat_column_idxes = []
 
         self.transformer = DataTransformer()
         self.transformer.fit(train_data, discrete_columns)
@@ -279,7 +282,7 @@ class CTGANSynthesizer(object):
             std = mean + 1
             fakez = torch.normal(mean=mean, std=std).to(self.device)
 
-            if test_instance:
+            if test_instance and self.cat_column_idxes:
                 if type(test_instance) is pd.DataFrame:
                     test_instance = test_instance.values
                 test_cat_onehot = self.oe.transform(test_instance[:, self.cat_column_idxes]).ravel()
